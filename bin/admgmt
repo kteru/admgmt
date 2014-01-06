@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+#
+# DNS authoritative data management tool
+#
+# Requirements:
+# ls, cat, cut, grep, date, awk, md5sum, ssh, rsync
+#
+DIR_BASE=$(cd $(dirname ${0}); pwd)
+
+
+###
+### variables
+###
+DIR_MASTERZONES=${DIR_BASE}/../domains
+DIR_CONF_SRV=${DIR_BASE}/../conf/servers
+DIR_DATA=${DIR_BASE}/../tmp/zones
+FILE_STATUS=${DIR_BASE}/../tmp/zones.status
+
+COMMENT=__SERIAL__
+SERIAL=`date +%s`
+NEED_SYNC=0
+
+
+###
+### make dir, file
+###
+[ -d "${DIR_MASTERZONES}" ] || mkdir -p "${DIR_MASTERZONES}"
+[ -d "${DIR_CONF_SRV}" ] || mkdir -p "${DIR_CONF_SRV}"
+[ -d "${DIR_DATA}" ] || mkdir -p "${DIR_DATA}"
+[ -f "${FILE_STATUS}" ] || touch "${FILE_STATUS}"
+
+
+###
+### functions
+###
+_list_new() {
+  for zone in `ls "${DIR_MASTERZONES}"`; do
+    if ! grep -q -E "^${zone}:" "${FILE_STATUS}"; then
+      echo "${zone}"
+    fi
+  done
+}
+
+_list_deleted() {
+  for zone in `cat "${FILE_STATUS}" | cut -d':' -f1`; do
+    if [ ! -f "${DIR_MASTERZONES}/${zone}" ]; then
+      echo "${zone}"
+    fi
+  done
+}
+
+_list_changed() {
+  for zone in `ls "${DIR_MASTERZONES}"`; do
+    _md5_now=`md5sum "${DIR_MASTERZONES}/${zone}" | awk '{print $1}'`
+    _md5_prev=`cat "${FILE_STATUS}" | grep -E "^${zone}:" | cut -d':' -f2`
+    if [ "${_md5_prev}x" = "x" ]; then
+      continue
+    fi
+    if [ "${_md5_now}" != "${_md5_prev}" ]; then
+      echo "${zone}"
+    fi
+  done
+}
+
+_update_new() {
+  zone="${1}"
+  cat "${DIR_MASTERZONES}/${zone}" | sed -e "s/${COMMENT}/${SERIAL}/" > "${DIR_DATA}/${zone}"
+  NEED_SYNC=1
+}
+
+_update_deleted() {
+  zone="${1}"
+  rm -f "${DIR_DATA}/${zone}"
+  NEED_SYNC=1
+}
+
+_update_changed() {
+  zone="${1}"
+  cat "${DIR_MASTERZONES}/${zone}" | sed -e "s/${COMMENT}/${SERIAL}/" > "${DIR_DATA}/${zone}"
+  NEED_SYNC=1
+}
+
+_save_status() {
+  for zone in `ls "${DIR_MASTERZONES}"`; do
+    _md5=`md5sum "${DIR_MASTERZONES}/${zone}" | awk '{print $1}'`
+    echo "${zone}:${_md5}"
+  done > "${FILE_STATUS}"
+}
+
+_sync() {
+  for conf_srv in ${DIR_CONF_SRV}/*.conf; do
+    . "${conf_srv}"
+    OPTS_SSH="-q -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -oConnectTimeout=5 -c blowfish -p ${SSH_PORT} -l ${SSH_USER} -i ${SSH_KEY}"
+    printf '[%s] %-15s (%s)\n' "starting sync" "${SSH_HOST}" "${DESCRIPTION}"
+
+    (
+      (
+        rsync -a --delete -e "ssh ${OPTS_SSH}" ${DIR_DATA}/ ${SSH_HOST}:${DIR_ZONES} && \
+        echo "${BASH_RELOAD}" | ssh ${OPTS_SSH} ${SSH_HOST} bash
+      )
+
+      if [ $? -eq 0 ]; then
+        printf '[\e[36m%-7s\e[m] %-15s (%s)\n' "success" "${SSH_HOST}" "${DESCRIPTION}"
+      else
+        printf '[\e[31m%-7s\e[m] %-15s (%s)\n' "failure" "${SSH_HOST}" "${DESCRIPTION}"
+      fi
+    ) &
+  done
+
+  wait
+}
+
+
+###
+### call
+###
+
+_main() {
+  while read zone; do
+    printf '[%-12s] %s\n' "new zone" "${zone}"
+    _update_new "${zone}"
+  done < <(_list_new)
+
+  while read zone; do
+    printf '[%-12s] %s\n' "deleted zone" "${zone}"
+    _update_deleted "${zone}"
+  done < <(_list_deleted)
+
+  while read zone; do
+    printf '[%-12s] %s\n' "changed zone" "${zone}"
+    _update_changed "${zone}"
+  done < <(_list_changed)
+
+  if [ ${NEED_SYNC} -ne 0 ]; then
+    _save_status
+    _sync
+  fi
+}
+
+_force_sync() {
+  _sync
+}
+
+
+###
+### GO
+###
+case ${1} in
+  force_sync)
+    _force_sync
+    ;;
+
+  *)
+    _main
+    ;;
+esac
+
