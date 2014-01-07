@@ -29,7 +29,7 @@ Detecting new/deleted/changed zone file, and updating serial numbers.
 Syncing zone directory by using rsync.
 
 3. reload  
-Throwing commands to reload name server via ssh.
+Throwing commands to reconfigure/reload name server via ssh.
 
 
 Usage
