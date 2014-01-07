@@ -54,6 +54,14 @@ Usage
 
 You Should change SOA serial number to `__SERIAL__`.
 
+    $TTL 3600
+    @               IN      SOA     ns1.example.com. hostmaster.example.com. (
+                                    __SERIAL__      ;serial
+                                    10800           ;refresh
+                                    3600            ;retry
+                                    604800          ;expire
+                                    600 )           ;negative cache
+
 ### Upload and Reload each authoritative name server
 
     $ make
