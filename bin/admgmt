@@ -5,7 +5,7 @@
 # Requirements:
 # ls, cat, cut, grep, date, awk, md5sum, ssh, rsync
 #
-DIR_BASE=$(cd $(dirname ${0}); pwd)
+DIR_BASE=$(cd ${BASH_SOURCE[0]%/*} && pwd)
 
 
 ###
