@@ -15,6 +15,7 @@ DIR_MASTERZONES=${DIR_BASE}/../domains
 DIR_CONF_SRV=${DIR_BASE}/../conf/servers
 DIR_DATA=${DIR_BASE}/../tmp/zones
 FILE_STATUS=${DIR_BASE}/../tmp/zones.status
+DIR_BACKUP=${DIR_BASE}/../tmp/zones.backup
 
 COMMENT=__SERIAL__
 SERIAL=`date +%s`
@@ -28,6 +29,7 @@ NEED_SYNC=0
 [ -d "${DIR_CONF_SRV}" ] || mkdir -p "${DIR_CONF_SRV}"
 [ -d "${DIR_DATA}" ] || mkdir -p "${DIR_DATA}"
 [ -f "${FILE_STATUS}" ] || touch "${FILE_STATUS}"
+[ -d "${DIR_BACKUP}" ] || mkdir -p "${DIR_BACKUP}"
 
 
 ###
@@ -60,6 +62,11 @@ _list_changed() {
       echo "${zone}"
     fi
   done
+}
+
+_backup() {
+  zone="${1}"
+  cp -af "${DIR_DATA}/${zone}" "${DIR_BACKUP}/${zone}.`date +%Y%m%d_%H%M%S`"
 }
 
 _update_new() {
@@ -123,11 +130,13 @@ _main() {
 
   while read zone; do
     printf '[%-12s] %s\n' "deleted zone" "${zone}"
+    _backup "${zone}"
     _update_deleted "${zone}"
   done < <(_list_deleted)
 
   while read zone; do
     printf '[%-12s] %s\n' "changed zone" "${zone}"
+    _backup "${zone}"
     _update_changed "${zone}"
   done < <(_list_changed)
 
