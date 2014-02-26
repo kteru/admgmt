@@ -88,7 +88,7 @@ _save_status() {
 }
 
 _sync() {
-  for conf_srv in ${DIR_CONF_SRV}/*.conf; do
+  for conf_srv in `ls ${DIR_CONF_SRV}/*.conf`; do
     . "${conf_srv}"
     OPTS_SSH="-q -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -oConnectTimeout=5 -c blowfish -p ${SSH_PORT} -l ${SSH_USER} -i ${SSH_KEY}"
     printf '[%s] %-15s (%s)\n' "starting sync" "${SSH_HOST}" "${DESCRIPTION}"
